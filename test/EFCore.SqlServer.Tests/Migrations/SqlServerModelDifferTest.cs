@@ -5,10 +5,10 @@ using System;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations.Internal;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.EntityFrameworkCore.SqlServer.Metadata.Internal;
-using Microsoft.EntityFrameworkCore.SqlServer.Migrations.Internal;
 using Microsoft.EntityFrameworkCore.SqlServer.Storage.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.TestUtilities;
@@ -827,18 +827,7 @@ namespace Microsoft.EntityFrameworkCore.Migrations
         protected override TestHelpers TestHelpers => SqlServerTestHelpers.Instance;
 
         protected override MigrationsModelDiffer CreateModelDiffer(DbContextOptions options)
-        {
-            var ctx = TestHelpers.CreateContext(options);
-            return new MigrationsModelDiffer(
-                new SqlServerTypeMappingSource(
-                    TestServiceFactory.Instance.Create<TypeMappingSourceDependencies>(),
-                    TestServiceFactory.Instance.Create<RelationalTypeMappingSourceDependencies>()),
-                new SqlServerMigrationsAnnotationProvider(
-                    new MigrationsAnnotationProviderDependencies()),
-                ctx.GetService<IChangeDetector>(),
-                ctx.GetService<IUpdateAdapterFactory>(),
-                ctx.GetService<CommandBatchPreparerDependencies>());
-        }
+            => (MigrationsModelDiffer)TestHelpers.CreateContext(options).GetService<IMigrationsModelDiffer>();
 
         private bool? IsMemoryOptimized(Annotatable annotatable)
             => annotatable[SqlServerAnnotationNames.MemoryOptimized] as bool?;
