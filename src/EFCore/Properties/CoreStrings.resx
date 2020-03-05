@@ -1290,6 +1290,12 @@
   <data name="IncludeOnNonEntity" xml:space="preserve">
     <value>Include has been used on non entity queryable.</value>
   </data>
+  <data name="MultipleFilteredIncludesOnSameNavigation" xml:space="preserve">
+    <value>Multiple filtered include operations on the same navigation '{navigationName}' are not supported.</value>
+  </data>
+  <data name="FilteredIncludeOperationNotSupported" xml:space="preserve">
+    <value>Operation '{operationName}' is not supported inside Include method.</value>
+  </data>
   <data name="CannotConvertQueryableToEnumerableMethod" xml:space="preserve">
     <value>Unable to convert queryable method to enumerable method.</value>
   </data>

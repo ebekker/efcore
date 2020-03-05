@@ -2411,6 +2411,14 @@ namespace Microsoft.EntityFrameworkCore.Diagnostics
                 navigationChain, navigationName);
 
         /// <summary>
+        ///     Operation '{operationName}' is not supported inside Include method.
+        /// </summary>
+        public static string FilteredIncludeOperationNotSupported([CanBeNull] object operationName)
+            => string.Format(
+                GetString("FilteredIncludeOperationNotSupported", nameof(operationName)),
+                operationName);
+
+        /// <summary>
         ///     Lambda expression used inside Include is not valid.
         /// </summary>
         public static string InvalidLambdaExpressionInsideInclude
@@ -2421,6 +2429,14 @@ namespace Microsoft.EntityFrameworkCore.Diagnostics
         /// </summary>
         public static string IncludeOnNonEntity
             => GetString("IncludeOnNonEntity");
+
+        /// <summary>
+        ///     Multiple filtered include operations on the same navigation '{navigationName}' are not supported.
+        /// </summary>
+        public static string MultipleFilteredIncludesOnSameNavigation([CanBeNull] object navigationName)
+            => string.Format(
+                GetString("MultipleFilteredIncludesOnSameNavigation", nameof(navigationName)),
+                navigationName);
 
         /// <summary>
         ///     Unable to convert queryable method to enumerable method.

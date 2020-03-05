@@ -84,6 +84,8 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
         {
             private EntityReference _entityReference;
 
+            public virtual LambdaExpression FilterExpression { get; set; }
+
             public IncludeTreeNode(IEntityType entityType, EntityReference entityReference)
             {
                 EntityType = entityType;
@@ -92,10 +94,16 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
 
             public virtual IEntityType EntityType { get; private set; }
 
-            public virtual IncludeTreeNode AddNavigation(INavigation navigation)
+            public virtual IncludeTreeNode AddNavigation(INavigation navigation, bool withFilter)
             {
                 if (TryGetValue(navigation, out var existingValue))
                 {
+                    if (existingValue.FilterExpression != null
+                        && withFilter)
+                    {
+                        throw new NotSupportedException(CoreStrings.MultipleFilteredIncludesOnSameNavigation(navigation.Name));
+                    }
+
                     return existingValue;
                 }
 

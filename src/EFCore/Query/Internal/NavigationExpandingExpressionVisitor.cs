@@ -32,6 +32,19 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
             { QueryableMethods.LastWithPredicate, QueryableMethods.LastWithoutPredicate },
             { QueryableMethods.LastOrDefaultWithPredicate, QueryableMethods.LastOrDefaultWithoutPredicate }
         };
+
+        private static readonly List<MethodInfo> _supportedFilteredIncludeOperations = new List<MethodInfo>
+        {
+            QueryableMethods.Where,
+            QueryableMethods.OrderBy,
+            QueryableMethods.OrderByDescending,
+            QueryableMethods.ThenBy,
+            QueryableMethods.ThenByDescending,
+            QueryableMethods.Skip,
+            QueryableMethods.Take,
+            QueryableMethods.AsQueryable
+        };
+
         private readonly QueryTranslationPreprocessor _queryTranslationPreprocessor;
         private readonly QueryCompilationContext _queryCompilationContext;
         private readonly PendingSelectorExpandingExpressionVisitor _pendingSelectorExpandingExpressionVisitor;
@@ -767,7 +780,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                             var currentNode = includeTreeNodes.Dequeue();
                             foreach (var navigation in FindNavigations(currentNode.EntityType, navigationName))
                             {
-                                var addedNode = currentNode.AddNavigation(navigation);
+                                var addedNode = currentNode.AddNavigation(navigation, withFilter: false);
                                 // This is to add eager Loaded navigations when owner type is included.
                                 PopulateEagerLoadedNavigations(addedNode);
                                 includeTreeNodes.Enqueue(addedNode);
@@ -786,7 +799,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                         ? entityReference.LastIncludeTreeNode
                         : entityReference.IncludePaths;
                     var includeLambda = expression.UnwrapLambdaFromQuote();
-                    var lastIncludeTree = PopulateIncludeTree(currentIncludeTreeNode, includeLambda.Body);
+                    var lastIncludeTree = PopulateIncludeTree(currentIncludeTreeNode, includeLambda.Body, withFilter: false);
                     if (lastIncludeTree == null)
                     {
                         throw new InvalidOperationException(CoreStrings.InvalidLambdaExpressionInsideInclude);
@@ -1445,12 +1458,12 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
 
             foreach (var navigation in outboundNavigations)
             {
-                var addedIncludeTreeNode = includeTreeNode.AddNavigation(navigation);
+                var addedIncludeTreeNode = includeTreeNode.AddNavigation(navigation, withFilter: false);
                 PopulateEagerLoadedNavigations(addedIncludeTreeNode);
             }
         }
 
-        private IncludeTreeNode PopulateIncludeTree(IncludeTreeNode includeTreeNode, Expression expression)
+        private IncludeTreeNode PopulateIncludeTree(IncludeTreeNode includeTreeNode, Expression expression, bool withFilter)
         {
             switch (expression)
             {
@@ -1459,7 +1472,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
 
                 case MemberExpression memberExpression:
                     var innerExpression = memberExpression.Expression.UnwrapTypeConversion(out var convertedType);
-                    var innerIncludeTreeNode = PopulateIncludeTree(includeTreeNode, innerExpression);
+                    var innerIncludeTreeNode = PopulateIncludeTree(includeTreeNode, innerExpression, withFilter: false);
                     var entityType = innerIncludeTreeNode.EntityType;
                     if (convertedType != null)
                     {
@@ -1473,16 +1486,60 @@ namespace Microsoft.EntityFrameworkCore.Query.Internal
                     var navigation = entityType.FindNavigation(memberExpression.Member);
                     if (navigation != null)
                     {
-                        var addedNode = innerIncludeTreeNode.AddNavigation(navigation);
+                        var addedNode = innerIncludeTreeNode.AddNavigation(navigation, withFilter);
+                        if (withFilter)
+                        {
+                            var prm = Expression.Parameter(expression.Type);
+                            addedNode.FilterExpression = Expression.Lambda(prm, prm);
+                        }
+
                         // This is to add eager Loaded navigations when owner type is included.
                         PopulateEagerLoadedNavigations(addedNode);
+
                         return addedNode;
                     }
 
                     break;
+
+                case MethodCallExpression methodCallExpression
+                    when methodCallExpression.Method.DeclaringType == typeof(Queryable):
+                {
+                    if (!methodCallExpression.Method.IsGenericMethod
+                        || !_supportedFilteredIncludeOperations.Contains(methodCallExpression.Method.GetGenericMethodDefinition()))
+                    {
+                        throw new NotSupportedException(CoreStrings.FilteredIncludeOperationNotSupported(methodCallExpression.Method.Name));
+                    }
+
+                    var result = PopulateIncludeTree(includeTreeNode, methodCallExpression.Arguments[0], withFilter: true);
+
+                    // we only need to attach filter expression at the top level
+                    if (!withFilter)
+                    {
+                        var body = ReplaceMethodChainRoot(expression, result.FilterExpression.Parameters[0]);
+                        result.FilterExpression = Expression.Lambda(body, result.FilterExpression.Parameters);
+                    }
+
+                    return result;
+                }
             }
 
             return null;
+
+            Expression ReplaceMethodChainRoot(Expression expression, Expression replaceWith)
+            {
+                if (expression is MethodCallExpression methodCall)
+                {
+                    var arguments = new List<Expression>();
+                    arguments.Add(ReplaceMethodChainRoot(methodCall.Arguments[0], replaceWith));
+                    arguments.AddRange(methodCall.Arguments.Skip(1));
+
+                    return methodCall.Update(methodCall.Object, arguments);
+                }
+                else
+                {
+                    return replaceWith;
+                }
+            }
         }
 
         private Expression Reduce(Expression source) => _reducingExpressionVisitor.Visit(source);
